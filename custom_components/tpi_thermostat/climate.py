@@ -350,14 +350,9 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
         return self._unit
 
     @property
-    def current_in_temperature(self):
+    def current_temperature(self):
         """Return the sensor temperature."""
         return self._cur_in_temp
-
-    @property
-    def current_out_temperature(self):
-        """Return the sensor temperature."""
-        return self._cur_out_temp
 
     @property
     def hvac_mode(self):
