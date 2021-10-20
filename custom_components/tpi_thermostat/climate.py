@@ -558,6 +558,7 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
             _LOGGER.info("Current power %s", self._cur_power)
 
             if not self._cur_power:
+                await self._async_heater_set_eco()
                 return
                 
             heating_delay = self._cur_power * round(self.eval_time_s / 100, 2)
