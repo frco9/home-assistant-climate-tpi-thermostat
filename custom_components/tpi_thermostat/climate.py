@@ -558,7 +558,7 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
             _LOGGER.info("Current power %s", self._cur_power)
 
             if not self._cur_power:
-                await self._async_heater_set_eco()
+                await self._async_heater_turn_off()
                 return
                 
             heating_delay = self._cur_power * round(self.eval_time_s / 100, 2)
@@ -580,7 +580,7 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
     async def _async_control_heating_off_cb(self, time=None):
         """Callback called after heating time to stop heating."""
         _LOGGER.info("Turning heater to eco mode to cool off %s", self.heater_entity_id)
-        await self._async_heater_set_eco()
+        await self._async_heater_turn_off()
 
     @property
     def _is_device_active(self):
