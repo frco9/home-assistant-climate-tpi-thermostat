@@ -8,7 +8,6 @@ from datetime import time, timedelta
 
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
-from homeassistant.components import light
 from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
 from homeassistant.components.climate.const import (
     ATTR_PRESET_MODE,
@@ -18,6 +17,9 @@ from homeassistant.components.climate.const import (
     HVACAction,
     HVACMode,
 )
+from homeassistant.components.light import ATTR_BRIGHTNESS
+from homeassistant.components.light import DOMAIN as LIGHT_DOMAIN
+from homeassistant.components.light import SERVICE_TURN_ON as LIGHT_SERVICE_TURN_ON
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_TEMPERATURE,
@@ -27,8 +29,6 @@ from homeassistant.const import (
     PRECISION_HALVES,
     PRECISION_TENTHS,
     PRECISION_WHOLE,
-    SERVICE_TURN_OFF,
-    SERVICE_TURN_ON,
     STATE_OFF,
     STATE_ON,
     STATE_UNAVAILABLE,
@@ -643,11 +643,11 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
         """Turn heater toggleable device on."""
         data = {
             ATTR_ENTITY_ID: self.heater_entity_id,
-            light.ATTR_BRIGHTNESS: self.qubino_to_light(value),
+            ATTR_BRIGHTNESS: self.qubino_to_light(value),
         }
 
         await self.hass.services.async_call(
-            light.DOMAIN, light.SERVICE_TURN_ON, data, context=self._context
+            LIGHT_DOMAIN, LIGHT_SERVICE_TURN_ON, data, context=self._context
         )
 
     async def async_set_preset_mode(self, preset_mode: str):
