@@ -5,6 +5,8 @@
   "issue_tracker": "https://github.com/frco9/home-assistant-climate-tpi-thermostat/issues",
   "requirements": [],
   "dependencies": [],
-  "version": "1.0.0",
-  "codeowners": ["@frco9"]
+  "version": "2.0.0",
+  "codeowners": [
+    "@frco9"
+  ]
 }

@@ -1,27 +1,22 @@
 """Adds support for TPI thermostat units."""
+
 import asyncio
+import functools
 import logging
 import math
-import functools
-
-import voluptuous as vol
 from datetime import time, timedelta
 
+import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
 from homeassistant.components import light
 from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
 from homeassistant.components.climate.const import (
     ATTR_PRESET_MODE,
-    CURRENT_HVAC_COOL,
-    CURRENT_HVAC_HEAT,
-    CURRENT_HVAC_IDLE,
-    CURRENT_HVAC_OFF,
-    HVAC_MODE_COOL,
-    HVAC_MODE_HEAT,
-    HVAC_MODE_OFF,
     PRESET_AWAY,
     PRESET_NONE,
-    SUPPORT_PRESET_MODE,
-    SUPPORT_TARGET_TEMPERATURE,
+    ClimateEntityFeature,
+    HVACAction,
+    HVACMode,
 )
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -39,14 +34,14 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.core import DOMAIN as HA_DOMAIN, CoreState, callback
+from homeassistant.core import DOMAIN as HA_DOMAIN
+from homeassistant.core import CoreState, callback
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.event import (
+    async_call_later,
     async_track_state_change_event,
     async_track_time_interval,
-    async_call_later
 )
 from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -83,7 +78,7 @@ CONF_AC_MODE = "ac_mode"
 CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 CONF_AWAY_TEMP = "away_temp"
 CONF_PRECISION = "precision"
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
+SUPPORT_FLAGS = ClimateEntityFeature.TARGET_TEMPERATURE
 
 
 window_sensor_mapping = {
@@ -105,7 +100,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
         vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
-            [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
+            [HVACMode.COOL, HVACMode.HEAT, HVACMode.OFF]
         ),
         vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
         vol.Optional(CONF_PRECISION): vol.In(
@@ -186,7 +181,9 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
         self.heater_entity_id = heater_entity_id
         self.in_temp_sensor_entity_id = in_temp_sensor_entity_id
         self.out_temp_sensor_entity_id = out_temp_sensor_entity_id
-        self.window_sensors_mapping = {window['window_sensor']: window for window in window_sensors_mapping or []}
+        self.window_sensors_mapping = {
+            window["window_sensor"]: window for window in window_sensors_mapping or []
+        }
         self.t_coeff = t_coeff
         self.c_coeff = c_coeff
         self.eval_time_s = eval_time_s
@@ -195,9 +192,9 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
         self._saved_target_temp = target_temp or away_temp
         self._temp_precision = precision
         if self.ac_mode:
-            self._hvac_list = [HVAC_MODE_COOL, HVAC_MODE_OFF]
+            self._hvac_list = [HVACMode.COOL, HVACMode.OFF]
         else:
-            self._hvac_list = [HVAC_MODE_HEAT, HVAC_MODE_OFF]
+            self._hvac_list = [HVACMode.HEAT, HVACMode.OFF]
         self._active = False
         self._cur_in_temp = None
         self._cur_out_temp = None
@@ -210,7 +207,7 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
         self._unique_id = unique_id
         self._support_flags = SUPPORT_FLAGS
         if away_temp:
-            self._support_flags = SUPPORT_FLAGS | SUPPORT_PRESET_MODE
+            self._support_flags = SUPPORT_FLAGS | ClimateEntityFeature.PRESET_MODE
         self._away_temp = away_temp
         self._is_away = False
 
@@ -311,7 +308,7 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
 
         # Set default state to off
         if not self._hvac_mode:
-            self._hvac_mode = HVAC_MODE_OFF
+            self._hvac_mode = HVACMode.OFF
 
         await self._async_control_heating()
 
@@ -365,13 +362,13 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
 
         Need to be one of CURRENT_HVAC_*.
         """
-        if self._hvac_mode == HVAC_MODE_OFF:
-            return CURRENT_HVAC_OFF
+        if self._hvac_mode == HVACMode.OFF:
+            return HVACAction.OFF
         if not self._is_device_active:
-            return CURRENT_HVAC_IDLE
+            return HVACAction.IDLE
         if self.ac_mode:
-            return CURRENT_HVAC_COOL
-        return CURRENT_HVAC_HEAT
+            return HVACAction.COOLING
+        return HVACAction.HEATING
 
     @property
     def target_temperature(self):
@@ -395,16 +392,16 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set hvac mode."""
-        if hvac_mode == HVAC_MODE_HEAT:
-            self._hvac_mode = HVAC_MODE_HEAT
+        if hvac_mode == HVACMode.HEAT:
+            self._hvac_mode = HVACMode.HEAT
             await self._async_control_heating()
             await self._update_control_loop()
-        elif hvac_mode == HVAC_MODE_COOL:
-            self._hvac_mode = HVAC_MODE_COOL
+        elif hvac_mode == HVACMode.COOL:
+            self._hvac_mode = HVACMode.COOL
             await self._async_control_heating()
             await self._update_control_loop()
-        elif hvac_mode == HVAC_MODE_OFF:
-            self._hvac_mode = HVAC_MODE_OFF
+        elif hvac_mode == HVACMode.OFF:
+            self._hvac_mode = HVACMode.OFF
             if self._stop_control_loop:
                 self._stop_control_loop()
                 if self._control_heating_off_call_later:
@@ -458,17 +455,25 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
 
-        delay = self.window_sensors_mapping[entity_id]['window_delay_opened'] if new_state.state == STATE_ON else self.window_sensors_mapping[entity_id]['window_delay_closed']
+        delay = (
+            self.window_sensors_mapping[entity_id]["window_delay_opened"]
+            if new_state.state == STATE_ON
+            else self.window_sensors_mapping[entity_id]["window_delay_closed"]
+        )
         self.async_on_remove(
             async_call_later(
-                self.hass, delay, functools.partial(self._async_handle_window_state_update, entity_id, new_state)
+                self.hass,
+                delay,
+                functools.partial(
+                    self._async_handle_window_state_update, entity_id, new_state
+                ),
             )
         )
         self.async_write_ha_state()
 
     async def _check_light_initial_state(self):
-        """Prevent the device from keep running if HVAC_MODE_OFF."""
-        if self._hvac_mode == HVAC_MODE_OFF and self._is_device_active:
+        """Prevent the device from keep running if HVACMode.OFF."""
+        if self._hvac_mode == HVACMode.OFF and self._is_device_active:
             _LOGGER.warning(
                 "The climate mode is OFF, but the switch device is ON. Turning off device %s",
                 self.heater_entity_id,
@@ -490,11 +495,25 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
     def _async_handle_window_state_update(self, entity_id, state, _time):
         """Handle window update state and react to it."""
         try:
-            if state.state == STATE_ON and self.hass.states.is_state(entity_id, STATE_ON) and not self._window_opened:
+            if (
+                state.state == STATE_ON
+                and self.hass.states.is_state(entity_id, STATE_ON)
+                and not self._window_opened
+            ):
                 self._window_opened = True
                 self.hass.loop.create_task(self._async_heater_turn_off())
-            elif state.state == STATE_OFF and self.hass.states.is_state(entity_id, STATE_OFF) and self._window_opened:
-                other_opened_windows = any([self.hass.states.is_state(window, STATE_ON) for window in self.window_sensors_mapping.keys() if window != entity_id])
+            elif (
+                state.state == STATE_OFF
+                and self.hass.states.is_state(entity_id, STATE_OFF)
+                and self._window_opened
+            ):
+                other_opened_windows = any(
+                    [
+                        self.hass.states.is_state(window, STATE_ON)
+                        for window in self.window_sensors_mapping.keys()
+                        if window != entity_id
+                    ]
+                )
                 if not other_opened_windows:
                     self._window_opened = False
                     self.hass.loop.create_task(self._update_control_loop())
@@ -551,7 +570,7 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
                     self._target_temp,
                 )
 
-            if self._window_opened or self._hvac_mode == HVAC_MODE_OFF:
+            if self._window_opened or self._hvac_mode == HVACMode.OFF:
                 return
 
             self._async_update_power()
@@ -560,7 +579,7 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
             if not self._cur_power:
                 await self._async_heater_turn_off()
                 return
-                
+
             heating_delay = self._cur_power * round(self.eval_time_s / 100, 2)
 
             _LOGGER.info("Turning on heater %s", self.heater_entity_id)
@@ -576,7 +595,6 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
 
             self.async_on_remove(self._control_heating_off_call_later)
 
-    
     async def _async_control_heating_off_cb(self, time=None):
         """Callback called after heating time to stop heating."""
         _LOGGER.info("Turning heater to eco mode to cool off %s", self.heater_entity_id)
@@ -585,12 +603,16 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
     @property
     def _is_device_active(self):
         """If the toggleable device is currently active."""
-        if not self.hass.states.get(self.heater_entity_id) or not self.hass.states.get(self.heater_entity_id).attributes.get("brightness"):
+        if not self.hass.states.get(self.heater_entity_id) or not self.hass.states.get(
+            self.heater_entity_id
+        ).attributes.get("brightness"):
             return None
 
         return (
             self.hass.states.is_state(self.heater_entity_id, STATE_ON)
-            and self.light_to_qubino(self.hass.states.get(self.heater_entity_id).attributes["brightness"])
+            and self.light_to_qubino(
+                self.hass.states.get(self.heater_entity_id).attributes["brightness"]
+            )
             >= VALUE_COMFORT_2
         )
 
@@ -617,7 +639,6 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
     def light_to_qubino(self, value):
         return math.floor(value * 99 / 255)
 
-    
     async def _async_set_heater_value(self, value):
         """Turn heater toggleable device on."""
         data = {
