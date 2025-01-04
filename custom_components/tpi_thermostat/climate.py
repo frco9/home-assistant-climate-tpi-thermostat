@@ -4,7 +4,7 @@ import asyncio
 import functools
 import logging
 import math
-from datetime import time, timedelta
+from datetime import timedelta
 
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
@@ -34,10 +34,7 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.core import DOMAIN as HA_DOMAIN
 from homeassistant.core import CoreState, callback
-from homeassistant.exceptions import ConditionError
-from homeassistant.helpers import condition
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
@@ -650,7 +647,7 @@ class TPIThermostat(ClimateEntity, RestoreEntity):
             LIGHT_DOMAIN, LIGHT_SERVICE_TURN_ON, data, context=self._context
         )
 
-    async def async_set_preset_mode(self, preset_mode: str):
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         if preset_mode == PRESET_AWAY and not self._is_away:
             self._is_away = True
